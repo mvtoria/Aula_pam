@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
+import { Linking } from 'react-native';
 import {
   StyleSheet,
   Text,
@@ -18,6 +19,8 @@ export default function App() {
 
   const [nome, setNome] = useState('');
   const [endereco, setEndereco] = useState('');
+  const [latitude, setLatitude] = useState('');
+  const [longitude, setLongitude] = useState('');
   const [usuarioEditando, setUsuarioEditando] = useState(null);
 
   useEffect(() => {
@@ -32,6 +35,44 @@ export default function App() {
         setCarregando(false);
       });
   }, []);
+
+  const pegarLocalizacao = async () => {
+  const { status } =
+    await Location.requestForegroundPermissionsAsync();
+
+  if (status !== 'granted') {
+    Alert.alert(
+      'Permissão negada',
+      'Permita o acesso à localização.'
+    );
+    return;
+  }
+
+  const localizacao =
+    await Location.getCurrentPositionAsync({});
+
+  setLatitude(
+    localizacao.coords.latitude.toFixed(6)
+  );
+
+  setLongitude(
+    localizacao.coords.longitude.toFixed(6)
+  );
+};
+
+  const abrirLocalizacao = () => {
+  if (!latitude || !longitude) {
+    Alert.alert(
+      'Atenção',
+      'Digite a latitude e a longitude primeiro.'
+    );
+    return;
+  }
+
+  const url = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+
+  Linking.openURL(url);
+};
 
   const adicionarUsuario = () => {
     if (!nome.trim() || !endereco.trim()) {
@@ -49,12 +90,18 @@ export default function App() {
         street: endereco,
         suite: '',
         city: '',
+        geo: {
+        lat: latitude,
+        lng: longitude,
+      },
       },
     };
 
     setUsuarios([novoUsuario, ...usuarios]);
     setNome('');
     setEndereco('');
+    setLatitude('');
+    setLongitude('');
   };
 
   const excluirUsuario = (id) => {
@@ -95,7 +142,17 @@ export default function App() {
 
     setNome(usuario.name);
     setEndereco(usuario.address.street);
+
+    setLatitude(
+      usuario.address.geo?.lat || ''
+    );
+
+    setLongitude(
+      usuario.address.geo?.lng || ''
+    );
+
     setUsuarioEditando(id);
+
   };
 
   const salvarAlteracao = () => {
@@ -188,6 +245,30 @@ export default function App() {
         onChangeText={setEndereco}
       />
 
+      <TextInput
+        style={styles.input}
+        placeholder="Latitude"
+        value={latitude}
+        onChangeText={setLatitude}
+        keyboardType="numeric"
+      />
+
+      <TextInput
+        style={styles.input}
+        placeholder="Longitude"
+        value={longitude}
+        onChangeText={setLongitude}
+        keyboardType="numeric"
+      />
+
+      <Button
+        title="LOCALIZAÇÃO"
+        onPress={abrirLocalizacao}
+        color="#8f7ff7"
+      />
+
+      <View style={{ marginBottom: 10 }} />
+
       {usuarioEditando === null ? (
         <Button
           title="Adicionar usuário"
@@ -237,6 +318,14 @@ export default function App() {
                 {item.address.city
                   ? ` - ${item.address.city}`
                   : ''}
+              </Text>
+
+              <Text style={styles.endereco}>
+                Latitude: {item.address.geo?.lat}
+              </Text>
+
+              <Text style={styles.endereco}>
+                Longitude: {item.address.geo?.lng}
               </Text>
 
               <Button
