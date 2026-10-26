@@ -36,43 +36,80 @@ export default function App() {
       });
   }, []);
 
-  const pegarLocalizacao = async () => {
-  const { status } =
-    await Location.requestForegroundPermissionsAsync();
 
-  if (status !== 'granted') {
-    Alert.alert(
-      'Permissão negada',
-      'Permita o acesso à localização.'
+    const pegarLocalizacao = () => {
+    const confirmar = window.confirm(
+        'Deseja permitir o acesso à sua localização?'
     );
-    return;
-  }
 
-  const localizacao =
-    await Location.getCurrentPositionAsync({});
+    if (!confirmar) {
+        return;
+    }
 
-  setLatitude(
-    localizacao.coords.latitude.toFixed(6)
-  );
+    navigator.geolocation.getCurrentPosition(
+        (posicao) => {
+        const latitudeAtual = posicao.coords.latitude;
+        const longitudeAtual = posicao.coords.longitude;
+        const precisao = posicao.coords.accuracy;
 
-  setLongitude(
-    localizacao.coords.longitude.toFixed(6)
-  );
-};
+        setLatitude(String(latitudeAtual));
+        setLongitude(String(longitudeAtual));
+
+        console.log('Latitude:', latitudeAtual);
+        console.log('Longitude:', longitudeAtual);
+        console.log('Precisão (m):', precisao);
+        },
+        (erro) => {
+        console.log(
+            'Não foi possível obter a localização:',
+            erro
+        );
+
+        window.alert(
+            'Não foi possível obter a localização. Verifique a permissão do navegador.'
+        );
+        },
+        {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+        }
+    );
+    };
 
   const abrirLocalizacao = () => {
-  if (!latitude || !longitude) {
-    Alert.alert(
-      'Atenção',
-      'Digite a latitude e a longitude primeiro.'
-    );
-    return;
-  }
+    if (!latitude.trim() || !longitude.trim()) {
+      Alert.alert(
+        'Atenção',
+        'Digite as coordenadas primeiro.'
+      );
+      return;
+    }
 
-  const url = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+    const lat = Number(latitude);
+    const lng = Number(longitude);
 
-  Linking.openURL(url);
-};
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      lat < -90 ||
+      lat > 90 ||
+      lng < -180 ||
+      lng > 180
+    ) {
+      Alert.alert(
+        'Atenção',
+        'Digite coordenadas válidas.'
+      );
+      return;
+    }
+
+    const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Erro', 'Não foi possível abrir o mapa.');
+    });
+  };
 
   const adicionarUsuario = () => {
     if (!nome.trim() || !endereco.trim()) {
@@ -91,13 +128,17 @@ export default function App() {
         suite: '',
         city: '',
         geo: {
-        lat: latitude,
-        lng: longitude,
-      },
+          lat: latitude,
+          lng: longitude,
+        },
       },
     };
 
-    setUsuarios([novoUsuario, ...usuarios]);
+    setUsuarios((usuariosAtuais) => [
+      novoUsuario,
+      ...usuariosAtuais,
+    ]);
+
     setNome('');
     setEndereco('');
     setLatitude('');
@@ -138,21 +179,17 @@ export default function App() {
   };
 
   const alterarUsuario = (id) => {
-    const usuario = usuarios.find((usuario) => usuario.id === id);
+    const usuario = usuarios.find(
+      (usuario) => usuario.id === id
+    );
+
+    if (!usuario) return;
 
     setNome(usuario.name);
     setEndereco(usuario.address.street);
-
-    setLatitude(
-      usuario.address.geo?.lat || ''
-    );
-
-    setLongitude(
-      usuario.address.geo?.lng || ''
-    );
-
+    setLatitude(usuario.address.geo?.lat || '');
+    setLongitude(usuario.address.geo?.lng || '');
     setUsuarioEditando(id);
-
   };
 
   const salvarAlteracao = () => {
@@ -164,31 +201,40 @@ export default function App() {
       return;
     }
 
+    const confirmarAlteracao = () => {
+      setUsuarios((usuariosAtuais) =>
+        usuariosAtuais.map((usuario) =>
+          usuario.id === usuarioEditando
+            ? {
+                ...usuario,
+                name: nome,
+                address: {
+                  ...usuario.address,
+                  street: endereco,
+                  geo: {
+                    ...usuario.address.geo,
+                    lat: latitude,
+                    lng: longitude,
+                  },
+                },
+              }
+            : usuario
+        )
+      );
+
+      setNome('');
+      setEndereco('');
+      setLatitude('');
+      setLongitude('');
+      setUsuarioEditando(null);
+    };
+
     if (Platform.OS === 'web') {
       const confirmar = window.confirm(
         'Tem certeza que deseja alterar este usuário?'
       );
 
-      if (confirmar) {
-        setUsuarios((usuariosAtuais) =>
-          usuariosAtuais.map((usuario) =>
-            usuario.id === usuarioEditando
-              ? {
-                  ...usuario,
-                  name: nome,
-                  address: {
-                    ...usuario.address,
-                    street: endereco,
-                  },
-                }
-              : usuario
-          )
-        );
-
-        setNome('');
-        setEndereco('');
-        setUsuarioEditando(null);
-      }
+      if (confirmar) confirmarAlteracao();
     } else {
       Alert.alert(
         'Confirmar alteração',
@@ -200,26 +246,7 @@ export default function App() {
           },
           {
             text: 'Alterar',
-            onPress: () => {
-              setUsuarios((usuariosAtuais) =>
-                usuariosAtuais.map((usuario) =>
-                  usuario.id === usuarioEditando
-                    ? {
-                        ...usuario,
-                        name: nome,
-                        address: {
-                          ...usuario.address,
-                          street: endereco,
-                        },
-                      }
-                    : usuario
-                )
-              );
-
-              setNome('');
-              setEndereco('');
-              setUsuarioEditando(null);
-            },
+            onPress: confirmarAlteracao,
           },
         ]
       );
@@ -263,6 +290,14 @@ export default function App() {
 
       <Button
         title="LOCALIZAÇÃO"
+        onPress={pegarLocalizacao}
+        color="#8f7ff7"
+      />
+
+      <View style={{ marginBottom: 10 }} />
+
+      <Button
+        title="ABRIR NO MAPA"
         onPress={abrirLocalizacao}
         color="#8f7ff7"
       />
@@ -288,6 +323,8 @@ export default function App() {
             onPress={() => {
               setNome('');
               setEndereco('');
+              setLatitude('');
+              setLongitude('');
               setUsuarioEditando(null);
             }}
             color="#df2929"
@@ -328,17 +365,23 @@ export default function App() {
                 Longitude: {item.address.geo?.lng}
               </Text>
 
-              <Button
-                title="Alterar"
-                onPress={() => alterarUsuario(item.id)}
-                color="#1e54ab"
-              />
+              <View style={styles.botoesContainer}>
+                <View style={styles.botao}>
+                  <Button
+                    title="Alterar"
+                    onPress={() => alterarUsuario(item.id)}
+                    color="#1e54ab"
+                  />
+                </View>
 
-              <Button
-                title="Excluir"
-                onPress={() => excluirUsuario(item.id)}
-                color="#df2929"
-              />
+                <View style={styles.botao}>
+                  <Button
+                    title="Excluir"
+                    onPress={() => excluirUsuario(item.id)}
+                    color="#df2929"
+                  />
+                </View>
+              </View>
             </View>
           )}
           style={styles.lista}
@@ -354,7 +397,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#260360',
-    paddingTop: 60,
+    paddingTop: 15,
     paddingHorizontal: 20,
   },
 
@@ -362,14 +405,14 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
     color: '#bdaef4',
   },
 
   subtitulo: {
     fontSize: 16,
     textAlign: 'center',
-    marginTop: -15,
+    marginTop: -8,
     marginBottom: 20,
     color: '#bdaef4',
   },
@@ -412,5 +455,16 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 4,
   },
-});
 
+  botoesContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+  },
+
+  botao: {
+    flex: 1,
+  },
+});
